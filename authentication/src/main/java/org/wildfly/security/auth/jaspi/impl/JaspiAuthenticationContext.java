@@ -18,13 +18,10 @@ package org.wildfly.security.auth.jaspi.impl;
 
 import static org.wildfly.common.Assert.checkNotNullParam;
 import static org.wildfly.security.auth.jaspi._private.ElytronMessages.log;
-import static org.wildfly.security.auth.jaspi.impl.SecurityActions.doPrivileged;
 
 import java.io.IOException;
 import java.security.Principal;
-import java.security.PrivilegedAction;
 import java.security.PrivilegedActionException;
-import java.security.PrivilegedExceptionAction;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -134,10 +131,7 @@ public class JaspiAuthenticationContext {
             @Override
             public void handle(Callback[] callbacks) throws IOException, UnsupportedCallbackException {
                 try {
-                    doPrivileged((PrivilegedExceptionAction<Void>) () -> {
-                        handleOne(callbacks, 0);
-                        return null;
-                    });
+                    handleOne(callbacks, 0);
                 } catch (Exception e) {
                     if (e instanceof PrivilegedActionException) {
                         if (e.getCause() instanceof UnsupportedCallbackException) {
@@ -299,7 +293,7 @@ public class JaspiAuthenticationContext {
             Roles roles = Roles.fromSet(this.roles);
             RoleMapper roleMapper = RoleMapper.constant(roles);
             SecurityIdentity temp = securityIdentity;
-            securityIdentity = doPrivileged((PrivilegedAction<SecurityIdentity>) (() -> temp.withDefaultRoleMapper(roleMapper)));
+            securityIdentity = temp.withDefaultRoleMapper(roleMapper);
         } else {
             log.trace("No roles request of CallbackHandler.");
         }

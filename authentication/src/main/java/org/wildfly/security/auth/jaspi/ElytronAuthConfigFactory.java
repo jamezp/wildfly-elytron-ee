@@ -16,14 +16,11 @@
 
 package org.wildfly.security.auth.jaspi;
 
-import static java.lang.System.getSecurityManager;
 import static org.wildfly.common.Assert.checkNotNullParam;
 import static org.wildfly.security.auth.jaspi._private.ElytronMessages.log;
 import static org.wildfly.security.auth.jaspi._private.ElytronEEMessages.eeLog;
 
 import java.lang.reflect.Constructor;
-import java.security.AccessController;
-import java.security.SecurityPermission;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -35,7 +32,6 @@ import java.util.UUID;
 
 import org.wildfly.security.auth.jaspi.impl.AuthenticationModuleDefinition;
 import org.wildfly.security.auth.jaspi.impl.ElytronAuthConfigProvider;
-import org.wildfly.security.manager.action.GetContextClassLoaderAction;
 
 import jakarta.security.auth.message.config.AuthConfigFactory;
 import jakarta.security.auth.message.config.AuthConfigProvider;
@@ -142,8 +138,6 @@ public class ElytronAuthConfigFactory extends AuthConfigFactory {
      */
     @Override
     public String registerConfigProvider(AuthConfigProvider provider, String layer, String appContext, String description) {
-        checkPermission(providerRegistrationSecurityPermission);
-
         return registerConfigProvider(provider, layer, appContext, description, false);
     }
 
@@ -153,8 +147,6 @@ public class ElytronAuthConfigFactory extends AuthConfigFactory {
     @Override
     public String registerConfigProvider(String className, Map<String, String> properties, String layer, String appContext, String description) {
         // TODO [ELY-1548] We should support persisting to configuration changes made by calling this method.
-        checkPermission(providerRegistrationSecurityPermission);
-
         AuthConfigProvider authConfigProvider = null;
         if (className != null) {
             ClassLoader classLoader = identifyClassLoader();
@@ -234,8 +226,6 @@ public class ElytronAuthConfigFactory extends AuthConfigFactory {
      */
     @Override
     public boolean removeRegistration(String registrationId) {
-        checkPermission(providerRegistrationSecurityPermission);
-
         String layer = null;
         String appContext = null;
         boolean removed = false;
@@ -271,7 +261,6 @@ public class ElytronAuthConfigFactory extends AuthConfigFactory {
     @Override
     public String[] detachListener(RegistrationListener listener, String layer, String appContext) {
         checkNotNullParam("listener", listener);
-        checkPermission(providerRegistrationSecurityPermission);
         List<String> registrationIDs = new ArrayList<>();
         synchronized (layerContextRegistration) {
             for (Registration current : layerContextRegistration.values()) {
@@ -335,23 +324,10 @@ public class ElytronAuthConfigFactory extends AuthConfigFactory {
     @Override
     public void refresh() {
         // [ELY-1538] Dynamic loading not presently supported, once supported refresh will reload the configuration.
-        checkPermission(providerRegistrationSecurityPermission);
-    }
-
-
-
-
-    private static void checkPermission(final SecurityPermission securityPermission) {
-        SecurityManager securityManager = getSecurityManager();
-        if (securityManager != null) {
-            securityManager.checkPermission(securityPermission);
-        }
     }
 
     private static ClassLoader identifyClassLoader() {
-        ClassLoader classLoader = getSecurityManager() != null
-                ? AccessController.doPrivileged(GetContextClassLoaderAction.getInstance())
-                : GetContextClassLoaderAction.getInstance().run();
+        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
 
         return classLoader != null ? classLoader : ClassLoader.getSystemClassLoader();
     }
