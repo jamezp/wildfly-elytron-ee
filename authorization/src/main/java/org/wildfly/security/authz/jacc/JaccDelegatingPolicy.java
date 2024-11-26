@@ -20,6 +20,7 @@ package org.wildfly.security.authz.jacc;
 import static java.lang.System.getSecurityManager;
 import static java.security.AccessController.doPrivileged;
 import static org.wildfly.security.authz.jacc.ElytronMessages.log;
+import static org.wildfly.security.authz.jacc.PolicyUtil.SM_SUPPORTED;
 
 import java.security.CodeSource;
 import java.security.Permission;
@@ -28,6 +29,7 @@ import java.security.Policy;
 import java.security.Principal;
 import java.security.PrivilegedAction;
 import java.security.ProtectionDomain;
+import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.Map;
@@ -58,7 +60,7 @@ import jakarta.security.jacc.WebUserDataPermission;
  */
 public class JaccDelegatingPolicy extends Policy {
 
-    private static final PrivilegedAction<Policy> GET_POLICY_ACTION = Policy::getPolicy;
+    private static final PrivilegedAction<Policy> GET_POLICY_ACTION = PolicyUtil::getPolicy;
     private static final String ANY_AUTHENTICATED_USER_ROLE = "**";
 
     private final Policy delegate;
@@ -78,7 +80,7 @@ public class JaccDelegatingPolicy extends Policy {
      * @param delegate the policy that will be used to delegate method calls
      */
     public JaccDelegatingPolicy(Policy delegate) {
-        this.delegate = Assert.checkNotNullParam("delegate", delegate);
+        this.delegate = SM_SUPPORTED ? Assert.checkNotNullParam("delegate", delegate) : delegate;
         this.supportedPermissionTypes.add(WebResourcePermission.class);
         this.supportedPermissionTypes.add(WebRoleRefPermission.class);
         this.supportedPermissionTypes.add(WebUserDataPermission.class);
@@ -116,16 +118,17 @@ public class JaccDelegatingPolicy extends Policy {
             log.authzFailedToCheckPermission(domain, permission, e);
         }
 
-        return this.delegate.implies(domain, permission);
+        return delegate != null && this.delegate.implies(domain, permission);
     }
 
     @Override
     public PermissionCollection getPermissions(ProtectionDomain domain) {
-        final PermissionCollection delegatePermissions = delegate.getPermissions(domain);
+        final PermissionCollection delegatePermissions =
+            delegate != null ? delegate.getPermissions(domain) : null;
         return new PermissionCollection() {
             @Override
             public void add(Permission permission) {
-                if (isJaccPermission(permission)) {
+                if (isJaccPermission(permission) || delegatePermissions == null) {
                     throw ElytronMessages.log.readOnlyPermissionCollection();
                 } else {
                     delegatePermissions.add(permission);
@@ -134,7 +137,9 @@ public class JaccDelegatingPolicy extends Policy {
 
             @Override
             public boolean implies(Permission permission) {
-                if (!isJaccPermission(permission) && delegatePermissions.implies(permission)) {
+                if (!isJaccPermission(permission) &&
+                        delegatePermissions != null &&
+                        delegatePermissions.implies(permission)) {
                     return true;
                 }
 
@@ -143,7 +148,9 @@ public class JaccDelegatingPolicy extends Policy {
 
             @Override
             public Enumeration<Permission> elements() {
-                return delegatePermissions.elements();
+                return delegatePermissions != null ?
+                    delegatePermissions.elements() :
+                    Collections.emptyEnumeration();
             }
         };
     }
@@ -156,7 +163,9 @@ public class JaccDelegatingPolicy extends Policy {
     @Override
     public void refresh() {
         //TODO: we can probably provide some caching for permissions and checks. In this case, we can use this method to refresh the cache.
-        this.delegate.refresh();
+        if (delegate != null) {
+            this.delegate.refresh();
+        }
     }
 
     private boolean impliesIdentityPermission(Permission permission) {
