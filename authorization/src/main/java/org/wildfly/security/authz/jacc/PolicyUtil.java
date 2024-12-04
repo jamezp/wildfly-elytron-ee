@@ -49,7 +49,7 @@ public final class PolicyUtil {
         }
     }
 
-    public static PolicyUtil gePolicyUtil() {
+    public static PolicyUtil getPolicyUtil() {
         return new PolicyUtil(getPolicy());
     }
 
